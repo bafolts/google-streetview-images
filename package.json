@@ -1,0 +1,28 @@
+{
+  "name": "google-streetview-images",
+  "version": "1.0.0",
+  "description": "Pull street view panorama data along a given route",
+  "main": "index.js",
+  "scripts": {
+   "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bafolts/google-streetview-images.git"
+  },
+  "keywords": [
+    "street",
+    "view",
+    "panorama",
+    "google",
+    "maps"
+  ],
+  "author": "Brian Folts <brian.folts@gmail.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bafolts/google-streetview-images/issues"
+  },
+  "homepage": "https://github.com/bafolts/google-streetview-images#readme",
+  "dependencies": {
+  }
+}
