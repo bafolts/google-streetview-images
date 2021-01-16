@@ -2,40 +2,70 @@
 <HTML>
     <HEAD>
         <TITLE>Street View Images Sample</TITLE>
-        <SCRIPT src="http://maps.google.com/maps/api/js?sensor=false" type="text/javascript"></SCRIPT>
+        <SCRIPT src="http://maps.google.com/maps/api/js?sensor=false&key=API_KEY_HERE" type="text/javascript"></SCRIPT>
         <SCRIPT src="./StreetViewImages.js"></SCRIPT>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.5.0/jszip.min.js" integrity="sha512-y3o0Z5TJF1UsKjs/jS2CDkeHN538bWsftxO9nctODL5W40nyXIbs0Pgyu7//icrQY9m6475gLaVr39i/uh/nLA==" crossorigin="anonymous"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip-utils/0.1.0/jszip-utils.min.js" integrity="sha512-3WaCYjK/lQuL0dVIRt1thLXr84Z/4Yppka6u40yEJT1QulYm9pCxguF6r8V84ndP5K03koI9hV1+zo/bUbgMtA==" crossorigin="anonymous"></script>
         <SCRIPT type="text/javascript">
+
         function main() {
+            var zip = new JSZip();
+            var i = 1;
+
+            var imageHolder = document.getElementById('imageHolder');
+            var addresses = document.getElementById("waypoints").value.split('\n');
+
             new StreetViewImages({
-                origin: document.getElementById("origin").value,
-                destination: document.getElementById("destination").value,
+                addresses: addresses,
                 apiKey: document.getElementById("apiKey").value,
                 onPanoLoaded: function (pano) {
-                    console.log(pano);
-                    document.body.appendChild(document.createElement("img"))
-                        .src = pano.panoUrl
+                    console.log(pano.panoUrl);
+                    var imageElement = document.createElement("img");
+                    imageElement.src = pano.panoUrl;
+                    imageElement.width = 100; // Display it small so they don't fill up the screen too fast.
+                    imageHolder.appendChild(imageElement);
+                    var num_string = ('' + i).padStart(4, '0')
+                    zip.file("image_" + num_string + ".jfif", urlToPromise(pano.panoUrl), {binary:true});
+                    i++;
                 },
                 onError: function (err) {
                     console.log(err);
                 },
                 onComplete: function () {
                     console.log("Done pulling images on route");
+                    zip.generateAsync({type:"blob"})
+                        .then(function callback(blob) {
+                            var blobUrl = URL.createObjectURL(blob);
+                            window.location.replace(blobUrl);
+                        });
                 }
+            });
+        }
+
+        function urlToPromise(url) {
+            return new Promise(function(resolve, reject) {
+                JSZipUtils.getBinaryContent(url, function (err, data) {
+                    if(err) {
+                        reject(err);
+                    } else {
+                        resolve(data);
+                    }
+                });
             });
         }
         </SCRIPT>
     </HEAD>
     <BODY>
         <h1>Street View Images Sample Usage</h1>
-        <p>Enter an origin and destination below along with a google maps api developer key. Usage rates will apply when pulling images.</p>
-        <p>Upon clicking go, the images along the provided route will be appended to the DOM.</p>
+        <p>Edit this index.html file to insert a google maps api developer key in two places (the script tag and form
+            input where you see API_KEY_HERE. Usage rates will apply when pulling images.</p>
+        <p>Enter an origin and one or more destinations below.</p>
+        <p>Upon clicking go, the images along the provided route will be appended to the DOM, then you'll get a zip file.</p>
         <p>This page is intended as a sample usage page to get started with.</p>
-        <label for="origin">Origin</label>
-        <input type="text" value="Golden, CO" placeholder="origin" id="origin" />
-        <label for="destination">Destination</label>
-        <input type="text" value="Boulder, CO" placeholder="destination" id="destination" />
-        <label for="Google API Key">API Key</label>
-        <input type="text" placeholder="api key" id="apiKey" />
+        <label for="waypoints">Waypoints (enter one address per line)</label>
+        <textarea id="waypoints"></textarea>
+        <input type="hidden" value="API_KEY_HERE" id="apiKey" />
         <input type="button" onclick="main()" value="Go" />
+        <div id="imageHolder"></div>
     </BODY>
 </HTML>

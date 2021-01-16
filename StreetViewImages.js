@@ -5,30 +5,30 @@ function StreetViewImages(options) {
         throw new Error("Must provide an google api key");
     }
 
-    if (!options || !options.origin) {
-        throw new Error("Must provide origin");
+    if (!options || !options.addresses || options.addresses.length < 2) {
+        throw new Error("Must provide at least two addresses");
     }
 
-    if (!options || !options.destination) {
-        throw new Error("Must provide destination");
-    }
-
-    var self = this;
     var m_sPanoClient = new google.maps.StreetViewService();
+    var m_sDirectionsService = new google.maps.DirectionsService();
     var m_sApiKey = options.apiKey;
-    var m_sOrigin = options.origin;
-    var m_sDestination = options.destination;
-    var m_aPanoImages = [];
+    var m_aAddresses = options.addresses;
     var m_fOnPanoLoaded = options.onPanoLoaded || function(){};
     var m_fOnComplete = options.onComplete || function(){};
     var m_aVertices = [];
     var m_iSensitivity = 50;
     var m_iSpeed = 1000;
+    var m_iIncrement = 0.012;
 
-    (new google.maps.DirectionsService).route({
-        origin: m_sOrigin,
-        destination: m_sDestination,
-        travelMode: google.maps.TravelMode.DRIVING
+    var addressIndex = 0;
+
+    doLeg();
+
+    function doLeg() {
+        m_sDirectionsService.route({
+            origin: m_aAddresses[addressIndex],
+            destination: m_aAddresses[addressIndex + 1],
+            travelMode: google.maps.TravelMode.DRIVING
         }, function(result, status) {
             if (status === google.maps.DirectionsStatus.OK) {
                 for (var i = 0, length = result.routes[0].legs.length; i < length; i++) {
@@ -38,17 +38,53 @@ function StreetViewImages(options) {
                         }
                     }
                 }
-                for (var i = 1, length = m_aVertices.length; i < length; i++) {
-                    if (distanceTo(m_aVertices[i], m_aVertices[i - 1]) < .009) {
+
+                for (i = 1, length = m_aVertices.length; i < length; i++) {
+                    if (distanceTo(m_aVertices[i], m_aVertices[i - 1]) < .002) {
                         m_aVertices.splice(i--, 1);
                         length--;
                     }
                 }
-                pullPanoImages();
+
+                addressIndex++;
+                if (addressIndex < m_aAddresses.length - 1) {
+                    doLeg();
+                } else {
+                    var smoothedLocations = getSmoothedLocations(m_aVertices);
+                    pullPanoImages(smoothedLocations);
+                }
+
             } else {
                 throw new Error("Error calculating route " + status);
             }
         });
+    }
+
+    function getSmoothedLocations(vertices) {
+
+        var smoothedLocations = [];
+        smoothedLocations.push(vertices[0]);
+
+        var distanceAlongSegment = 0;
+
+        for (var i = 1, length = vertices.length; i < length; i++) {
+
+            var from = vertices[i - 1];
+            var to = vertices[i];
+            var segmentLength = distanceTo(from, to);
+
+            while (distanceAlongSegment + m_iIncrement < segmentLength) {
+                distanceAlongSegment += m_iIncrement;
+                smoothedLocations.push(tween(from, to, distanceAlongSegment / segmentLength));
+            }
+
+            // Preparing for the next iteration. The distanceAlongSegment will be negative here,
+            // but it will go positive during the next iteration before we use it again.
+            distanceAlongSegment = distanceAlongSegment - segmentLength;
+        }
+
+        return smoothedLocations;
+    }
 
     function toRadians(deg) {
         return deg * (Math.PI / 180)
@@ -69,24 +105,34 @@ function StreetViewImages(options) {
         return 6371 * c;
     }
 
-    function pullPanoImages() {
-        if (m_aVertices.length) {
-            var vertex = m_aVertices.shift();
+    function tween(start, end, progressRatio) {
+        var lat = end.lat() * progressRatio + start.lat() * (1 - progressRatio);
+        var lon = end.lng() * progressRatio + start.lng() * (1 - progressRatio);
+        return new google.maps.LatLng(lat, lon);
+    }
+
+    function pullPanoImages(vertices, previousBearing) {
+        if (vertices.length) {
+            var vertex = vertices.shift();
             m_sPanoClient.getPanoramaByLocation(vertex, m_iSensitivity, function (panoData, status) {
                 if (status === "OK") {
+                    var bearing = previousBearing;
+                    if (vertices.length) {
+                        bearing = bearingTo(vertex, vertices[0]);
+                    }
                     m_fOnPanoLoaded({
                         panoData: panoData,
                         panoUrl: [
                             "https://maps.googleapis.com/maps/api/streetview?size=640x640",
                             "pano=" + panoData.location.pano,
                             "fov=90",
-                            "heading=" + bearingTo(vertex, m_aVertices[0] || vertex),
+                            "heading=" + bearing,
                             "pitch=0",
                             "key=" + m_sApiKey
                         ].join("&")
                     });
                     setTimeout(function() {
-                        pullPanoImages();
+                        pullPanoImages(vertices, bearing);
                     }, m_iSpeed);
                 } else {
                     m_fOnError(new Error(status));
